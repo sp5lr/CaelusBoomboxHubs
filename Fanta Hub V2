@@ -1,0 +1,344 @@
+-- Fanta Hub Rewritten - Fixed Errors for 2020 Roblox Revivals (Caelus.lol)
+-- Fixed: "attempt to call a nil value" errors caused by using non-existent TextChanged event.
+-- Changed to use GetPropertyChangedSignal("Text") for live updates (compatible with older Roblox).
+-- Also added FocusLost as backup for when player presses Enter or clicks away.
+-- Audio prefix: Changed to standard "rbxassetid://" as revivals like Caelus likely use Roblox asset IDs.
+-- If catalog works better, change back to "rbxasset://catalog/".
+-- Minor fixes: Humanoid:StopAllAnimationTracks() → stop all tracks properly.
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+-- Simple GUI Creation
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.Name = "FantaHubRewritten"
+ScreenGui.ResetOnSpawn = false
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 400, 0, 500)
+MainFrame.Position = UDim2.new(0.5, -200, 0.5, -250)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.BorderSizePixel = 2
+MainFrame.BorderColor3 = Color3.fromRGB(255, 100, 100)
+MainFrame.Parent = ScreenGui
+
+local Title = Instance.new("TextLabel")
+Title.Text = "Fanta Hub Rewritten (2020 Compatible)"
+Title.Size = UDim2.new(1, 0, 0, 50)
+Title.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Title.TextColor3 = Color3.new(1,1,1)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 20
+Title.Parent = MainFrame
+
+-- Tabs
+local TabFrame = Instance.new("Frame")
+TabFrame.Size = UDim2.new(1, 0, 0, 40)
+TabFrame.Position = UDim2.new(0, 0, 0, 50)
+TabFrame.BackgroundTransparency = 1
+TabFrame.Parent = MainFrame
+
+local Sections = {}
+local CurrentSection = nil
+
+local function ShowSection(section)
+    if CurrentSection then CurrentSection.Visible = false end
+    CurrentSection = section
+    section.Visible = true
+end
+
+local function CreateTab(name, posX)
+    local btn = Instance.new("TextButton")
+    btn.Text = name
+    btn.Size = UDim2.new(0, 100, 1, 0)
+    btn.Position = UDim2.new(0, posX, 0, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Parent = TabFrame
+    
+    local section = Instance.new("Frame")
+    section.Size = UDim2.new(1, -20, 1, -100)
+    section.Position = UDim2.new(0, 10, 0, 90)
+    section.BackgroundTransparency = 1
+    section.Visible = false
+    section.Parent = MainFrame
+    Sections[name] = section
+    
+    btn.MouseButton1Click:Connect(function() ShowSection(section) end)
+    return section
+end
+
+-- Audio prefix - standard Roblox format (works in most revivals)
+local AUDIO_PREFIX = "rbxassetid://"
+
+-- Variables for inputs
+local IDPlay = 0
+local IDVis = 0
+local TargetPlayer = ""
+
+-- AntiLog Tab
+local AntiSection = CreateTab("Antilog", 0)
+
+local IDBoxPlay = Instance.new("TextBox")
+IDBoxPlay.PlaceholderText = "Enter ID for Play/Mass"
+IDBoxPlay.Size = UDim2.new(0.8, 0, 0, 30)
+IDBoxPlay.Position = UDim2.new(0.1, 0, 0, 10)
+IDBoxPlay.Parent = AntiSection
+
+-- Live update + backup on focus lost
+IDBoxPlay:GetPropertyChangedSignal("Text"):Connect(function()
+    IDPlay = tonumber(IDBoxPlay.Text) or 0
+end)
+IDBoxPlay.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        IDPlay = tonumber(IDBoxPlay.Text) or 0
+    end
+end)
+
+-- Buttons...
+local PlayBtn = Instance.new("TextButton")
+PlayBtn.Text = "Play ID"
+PlayBtn.Size = UDim2.new(0.8, 0, 0, 40)
+PlayBtn.Position = UDim2.new(0.1, 0, 0, 50)
+PlayBtn.Parent = AntiSection
+
+local MassBtn = Instance.new("TextButton")
+MassBtn.Text = "Massplay ID"
+MassBtn.Size = UDim2.new(0.8, 0, 0, 40)
+MassBtn.Position = UDim2.new(0.1, 0, 0, 100)
+MassBtn.Parent = AntiSection
+
+local SyncBtn = Instance.new("TextButton")
+SyncBtn.Text = "Sync"
+SyncBtn.Size = UDim2.new(0.8, 0, 0, 40)
+SyncBtn.Position = UDim2.new(0.1, 0, 0, 150)
+SyncBtn.Parent = AntiSection
+
+-- Visualizer Tab
+local VisSection = CreateTab("Visualizer", 100)
+
+local IDBoxVis = Instance.new("TextBox")
+IDBoxVis.PlaceholderText = "Enter ID for Visualizer"
+IDBoxVis.Size = UDim2.new(0.8, 0, 0, 30)
+IDBoxVis.Position = UDim2.new(0.1, 0, 0, 10)
+IDBoxVis.Parent = VisSection
+
+IDBoxVis:GetPropertyChangedSignal("Text"):Connect(function()
+    IDVis = tonumber(IDBoxVis.Text) or 0
+end)
+IDBoxVis.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        IDVis = tonumber(IDBoxVis.Text) or 0
+    end
+end)
+
+local VisBtn = Instance.new("TextButton")
+VisBtn.Text = "Visualize ID"
+VisBtn.Size = UDim2.new(0.8, 0, 0, 40)
+VisBtn.Position = UDim2.new(0.1, 0, 0, 50)
+VisBtn.Parent = VisSection
+
+-- Others Tab
+local OthersSection = CreateTab("Others", 200)
+
+local TargetBox = Instance.new("TextBox")
+TargetBox.PlaceholderText = "Enter Player Name"
+TargetBox.Size = UDim2.new(0.8, 0, 0, 30)
+TargetBox.Position = UDim2.new(0.1, 0, 0, 10)
+TargetBox.Parent = OthersSection
+
+TargetBox:GetPropertyChangedSignal("Text"):Connect(function()
+    TargetPlayer = TargetBox.Text
+end)
+TargetBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        TargetPlayer = TargetBox.Text
+    end
+end)
+
+local LagBtn = Instance.new("TextButton")
+LagBtn.Text = "Physics Lag"
+LagBtn.Size = UDim2.new(0.8, 0, 0, 40)
+LagBtn.Position = UDim2.new(0.1, 0, 0, 50)
+LagBtn.Parent = OthersSection
+
+local KillBtn = Instance.new("TextButton")
+KillBtn.Text = "ToolKill"
+KillBtn.Size = UDim2.new(0.8, 0, 0, 40)
+KillBtn.Position = UDim2.new(0.1, 0, 0, 100)
+KillBtn.Parent = OthersSection
+
+-- Helper functions
+local function getEquippedBoomboxes()
+    local boxes = {}
+    for _, v in pairs(LocalPlayer.Character:GetChildren()) do
+        if v:IsA("Tool") and v:FindFirstChild("Handle") and v.Handle:FindFirstChildOfClass("Sound") then
+            table.insert(boxes, v)
+        end
+    end
+    return boxes
+end
+
+local function sync()
+    for _, v in getEquippedBoomboxes() do
+        if v.Handle.Sound then
+            v.Handle.Sound.TimePosition = 0
+        end
+    end
+end
+
+local function playBasic()
+    local soundId = AUDIO_PREFIX .. tostring(IDPlay)
+    for _, v in getEquippedBoomboxes() do
+        if v.Handle.Sound then
+            v.Handle.Sound.SoundId = soundId
+            v.Handle.Sound.TimePosition = 0
+            v.Handle.Sound:Play()
+        end
+    end
+end
+
+local function playMass()
+    for _, v in pairs(LocalPlayer.Backpack:GetChildren()) do
+        if v:IsA("Tool") and v:FindFirstChild("Handle") and v.Handle:FindFirstChildOfClass("Sound") then
+            v.Parent = LocalPlayer.Character
+        end
+    end
+    task.wait(0.1)
+    playBasic()
+end
+
+local function visualize()
+    local soundId = AUDIO_PREFIX .. tostring(IDVis)
+    local me = LocalPlayer.Name
+    local originalPos = Workspace[me].HumanoidRootPart.CFrame
+
+    for _, v in pairs(LocalPlayer.Character:GetChildren()) do
+        if v:IsA("Tool") then v.Parent = LocalPlayer.Backpack end
+    end
+    task.wait(1)
+
+    local visualizerTools = {}
+    for _, v in pairs(LocalPlayer.Backpack:GetChildren()) do
+        if v:IsA("Tool") and v:FindFirstChild("Handle") and v.Handle:FindFirstChildOfClass("Sound") then
+            v.Parent = LocalPlayer.Character
+            table.insert(visualizerTools, v)
+            v.Handle.Sound.SoundId = soundId
+            v.Handle.Sound.TimePosition = 0
+            v.Handle.Sound:Play()
+        end
+    end
+
+    task.wait(0.5)
+    for _, track in pairs(LocalPlayer.Character.Humanoid:GetPlayingAnimationTracks()) do
+        track:Stop()
+    end
+    sync()
+
+    Workspace[me].HumanoidRootPart.CFrame = CFrame.new(5000, 50000, 5000)
+    task.wait(2)
+
+    local rightArm = Workspace[me]:FindFirstChild("Right Arm") or Workspace[me]:FindFirstChild("RightUpperArm")
+    if rightArm then rightArm:ClearAllChildren() end
+
+    for k, tool in pairs(visualizerTools) do
+        if tool:FindFirstChild("Handle") then
+            coroutine.wrap(function()
+                local spin = 0
+                repeat
+                    local loudness = tool.Handle.Sound.PlaybackLoudness
+                    local distance = math.round(loudness / 155) + 2
+                    local angleY = math.rad(spin + (k * (360 / #visualizerTools)))
+                    local angleZ = math.rad(spin)
+                    local rootPos = Workspace[me].HumanoidRootPart.Position
+                    local pos = CFrame.new(rootPos) * CFrame.Angles(0, angleY, angleZ) * CFrame.new(0, 1.3, distance)
+                    tool.Handle.CFrame = CFrame.new(pos.Position, rootPos)
+                    tool.Handle.Velocity = Vector3.new(30, 0, 0)
+                    spin = spin + 0.7
+                    RunService.RenderStepped:Wait()
+                until not tool.Parent
+            end)()
+        end
+    end
+
+    task.wait(1)
+    local torso = Workspace[me]:FindFirstChild("Torso") or Workspace[me]:FindFirstChild("UpperTorso")
+    if torso then
+        torso.Anchored = true
+        task.wait(0.1)
+        torso.Anchored = false
+    end
+
+    Workspace[me].HumanoidRootPart.CFrame = originalPos
+end
+
+local function physicsLag()
+    local targets = {}
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr.Name:lower():find(TargetPlayer:lower(), 1, true) or (plr.DisplayName and plr.DisplayName:lower():find(TargetPlayer:lower(), 1, true)) then
+            table.insert(targets, plr)
+        end
+    end
+    if #targets == 0 then return end
+    local char = targets[1].Character
+    if not char then return end
+
+    local x = Instance.new("BindableEvent")
+    for _, ev in {RunService.RenderStepped, RunService.Heartbeat, RunService.Stepped} do
+        ev:Connect(function() x:Fire(tick()) end)
+    end
+
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            shared.SuperStepped = x.Event
+            shared.SuperStepped:Connect(function()
+                pcall(function() sethiddenproperty(part, "NetworkIsSleeping", true) end)
+            end)
+        end
+    end
+end
+
+local function toolKill()
+    local target = Players:FindFirstChild(TargetPlayer)
+    if not target or not target.Character then return end
+    local tool = LocalPlayer.Backpack:FindFirstChild("BoomBox") or LocalPlayer.Character:FindFirstChild("BoomBox")
+    if not tool then return end
+
+    local targetRoot = target.Character:FindFirstChild("UpperTorso") or target.Character:FindFirstChild("Torso")
+    if not targetRoot then return end
+
+    local newHum = LocalPlayer.Character.Humanoid:Clone()
+    newHum.Parent = LocalPlayer.Character
+    LocalPlayer.Character.Humanoid:Destroy()
+    newHum:ChangeState(Enum.HumanoidStateType.Physics)
+
+    tool.Parent = LocalPlayer.Character
+    tool.Handle.Size = Vector3.new(4, 4, 4)
+
+    local rightArm = LocalPlayer.Character:FindFirstChild("RightLowerArm") or LocalPlayer.Character:FindFirstChild("Right Arm")
+    if rightArm then
+        local armCF = rightArm.CFrame * CFrame.new(0, -1, 0)
+        tool.Grip = armCF:ToObjectSpace(targetRoot.CFrame):inverse()
+    end
+
+    firetouchinterest(targetRoot, tool.Handle, 0)
+    firetouchinterest(targetRoot, tool.Handle, 1)
+    task.wait()
+    LocalPlayer.Character:BreakJoints()
+end
+
+-- Bind buttons
+PlayBtn.MouseButton1Click:Connect(playBasic)
+MassBtn.MouseButton1Click:Connect(playMass)
+SyncBtn.MouseButton1Click:Connect(sync)
+VisBtn.MouseButton1Click:Connect(visualize)
+LagBtn.MouseButton1Click:Connect(physicsLag)
+KillBtn.MouseButton1Click:Connect(toolKill)
+
+-- Default tab
+ShowSection(AntiSection)
+
+print("Fanta Hub Rewritten Fixed & Loaded! Use standard Roblox audio IDs (rbxassetid://ID)")
